@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Sharoz Map — Find Any Place on Earth</title>
+<meta name="description" content="Sharoz Map — a free, open-source, colorful map. Search any place, locate yourself, switch satellite & dark mode, and share locations instantly.">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<style>
+  :root{
+    --bg:#ffffff;
+    --surface:#ffffff;
+    --surface-2:#f1f3f4;
+    --text:#202124;
+    --text-dim:#5f6368;
+    --line:#e0e2e5;
+    --blue:#1a73e8;
+    --blue-dark:#1558b0;
+    --green:#34a853;
+    --yellow:#fbbc04;
+    --red:#ea4335;
+    --shadow:0 2px 6px rgba(32,33,36,0.28);
+    --shadow-lg:0 4px 18px rgba(32,33,36,0.24);
+    --radius:24px;
+  }
+  html.dark{
+    --bg:#0e1116;
+    --surface:#1b1e23;
+    --surface-2:#262a30;
+    --text:#e8eaed;
+    --text-dim:#9aa0a6;
+    --line:#33363b;
+    --shadow:0 2px 8px rgba(0,0,0,0.5);
+    --shadow-lg:0 6px 22px rgba(0,0,0,0.55);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:'Roboto', Arial, sans-serif;
+    color:var(--text);
+    background:var(--bg);
+    overflow:hidden;
+    transition:background .3s ease,color .3s ease;
+  }
+  #map{ position:fixed; inset:0; z-index:0; background:var(--surface-2); }
+
+  /* ---------- Brand ---------- */
+  .brand{
+    position:fixed; top:14px; left:14px; z-index:600;
+    display:flex; align-items:center; gap:10px;
+    background:var(--surface); padding:8px 16px 8px 10px;
+    border-radius:999px; box-shadow:var(--shadow-lg);
+  }
+  .brand .logo{
+    width:36px;height:36px;flex:none; display:flex; align-items:center; justify-content:center;
+  }
+  .brand h1{
+    font-size:19px; font-weight:700; margin:0; line-height:1.1; letter-spacing:-0.01em;
+  }
+  .brand h1 .s1{color:var(--blue);}
+  .brand h1 .s2{color:var(--red);}
+  .brand h1 .s3{color:var(--yellow);}
+  .brand h1 .s4{color:var(--green);}
+  .brand h1 .s5{color:var(--blue);}
+  .brand p{ margin:1px 0 0; font-size:10.5px; color:var(--text-dim); font-weight:500; letter-spacing:0.02em; }
+
+  /* ---------- Top-right controls ---------- */
+  .instruments{
+    position:fixed; top:14px; right:14px; z-index:600;
+    display:flex; flex-direction:column; gap:10px; align-items:flex-end;
+  }
+  .seg{
+    display:flex; background:var(--surface); border-radius:999px;
+    box-shadow:var(--shadow-lg); padding:4px; gap:2px;
+  }
+  .seg button{
+    border:none; background:transparent; cursor:pointer;
+    font-family:'Roboto',sans-serif; font-size:13px; font-weight:600;
+    padding:8px 14px; border-radius:999px; color:var(--text-dim);
+    transition:all .2s ease; white-space:nowrap;
+  }
+  .seg button.active.street{ background:var(--blue); color:#fff; }
+  .seg button.active.dark{ background:#202124; color:#fff; }
+  .seg button.active.sat{ background:var(--green); color:#fff; }
+
+  .icon-btn{
+    width:42px;height:42px; border-radius:50%; border:none;
+    background:var(--surface); color:var(--blue); cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:var(--shadow-lg); transition:transform .15s ease;
+  }
+  .icon-btn:hover{ transform:scale(1.06); }
+  .icon-btn svg{width:19px;height:19px;}
+
+  /* ---------- Search ---------- */
+  .search-wrap{
+    position:fixed; top:14px; left:50%; transform:translateX(-50%);
+    z-index:600; width:min(460px, calc(100vw - 260px));
+  }
+  .search-box{
+    display:flex; align-items:center; gap:10px;
+    background:var(--surface); border-radius:999px;
+    padding:11px 18px; box-shadow:var(--shadow-lg);
+  }
+  .search-box svg{width:18px;height:18px; color:var(--blue); flex:none;}
+  .search-box input{
+    border:none; outline:none; background:transparent; width:100%;
+    font-family:'Roboto',sans-serif; font-size:14.5px; color:var(--text);
+  }
+  .search-box input::placeholder{ color:var(--text-dim); }
+  .search-box .clear-btn{
+    border:none;background:var(--surface-2);color:var(--text-dim);
+    width:22px;height:22px;border-radius:50%;cursor:pointer;
+    display:none; align-items:center; justify-content:center; flex:none; font-size:13px;
+  }
+  .search-results{
+    margin-top:8px; background:var(--surface); border-radius:16px;
+    box-shadow:var(--shadow-lg); overflow:hidden;
+    display:none; max-height:280px; overflow-y:auto;
+  }
+  .search-results.show{ display:block; }
+  .search-results div{
+    padding:11px 18px; font-size:13.5px; cursor:pointer;
+    border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:flex-start;
+  }
+  .search-results div:last-child{ border-bottom:none; }
+  .search-results div:hover{ background:var(--surface-2); }
+  .search-results .empty{ opacity:0.55; cursor:default; font-style:italic; }
+  .search-results .pin-dot{ color:var(--red); flex:none; margin-top:2px; }
+
+  /* ---------- Info card ---------- */
+  .info-card{
+    position:fixed; left:14px; bottom:14px; z-index:600;
+    width:320px; max-width:calc(100vw - 28px);
+    background:var(--surface); border-radius:var(--radius);
+    box-shadow:var(--shadow-lg); padding:0; overflow:hidden;
+    transform:translateY(calc(100% + 24px));
+    transition:transform .4s cubic-bezier(.2,.8,.2,1);
+  }
+  .info-card.show{ transform:translateY(0); }
+  .info-top{
+    background:linear-gradient(120deg, var(--blue), #4285f4 55%, var(--green));
+    padding:16px 18px; color:#fff; position:relative;
+  }
+  .info-top .close{
+    position:absolute; top:10px; right:12px; background:rgba(255,255,255,0.25);
+    border:none; color:#fff; width:24px;height:24px;border-radius:50%;
+    cursor:pointer; font-size:14px; display:flex;align-items:center;justify-content:center;
+  }
+  .info-top h3{ margin:0 26px 4px 0; font-size:16px; font-weight:700; }
+  .info-top .coords{
+    font-family:'Roboto Mono',monospace; font-size:12px; opacity:0.92;
+  }
+  .info-body{ padding:14px 18px 16px; }
+  .fn-rows{ display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+  .fn-row{
+    display:flex; justify-content:space-between; gap:10px;
+    font-size:12.5px; padding-bottom:5px; border-bottom:1px solid var(--line);
+  }
+  .fn-row .k{ color:var(--text-dim); }
+  .fn-row .v{ font-weight:600; text-align:right; }
+  .fn-actions{ display:flex; gap:8px; }
+  .fn-actions button{
+    flex:1; display:flex; align-items:center; justify-content:center; gap:6px;
+    border:none; padding:10px 10px; border-radius:999px; cursor:pointer; font-size:12.5px;
+    font-weight:700; font-family:'Roboto',sans-serif; transition:opacity .2s ease;
+  }
+  .fn-actions button:active{ opacity:0.8; }
+  .fn-actions svg{ width:14px; height:14px; }
+  .fn-actions .ghost{ background:var(--surface-2); color:var(--text); }
+  .fn-actions .primary{ background:var(--blue); color:#fff; }
+
+  .toast{
+    position:fixed; bottom:14px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:#202124; color:#fff; padding:11px 20px;
+    border-radius:999px; font-size:13px; z-index:900; opacity:0; pointer-events:none;
+    transition:all .3s ease; font-weight:500;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---------- Developer credit ---------- */
+  .credit{
+    position:fixed; bottom:14px; right:14px; z-index:600;
+    background:var(--surface); border-radius:999px; box-shadow:var(--shadow-lg);
+    padding:8px 14px 8px 8px; display:flex; align-items:center; gap:8px;
+    text-decoration:none; color:var(--text); font-size:12px; font-weight:600;
+    transition:transform .15s ease;
+  }
+  .credit:hover{ transform:translateY(-2px); }
+  .credit .fb-icon{
+    width:22px;height:22px;border-radius:50%; background:#1877F2; flex:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .credit .fb-icon svg{ width:13px; height:13px; fill:#fff; }
+  .credit span{ color:var(--text-dim); font-weight:400; display:block; font-size:10.5px; }
+  .credit b{ display:block; line-height:1.15; }
+
+  .leaflet-control-zoom{ display:none; }
+  .custom-pin{ filter:drop-shadow(0 4px 6px rgba(0,0,0,0.35)); }
+
+  @media (max-width: 760px){
+    .brand p{ display:none; }
+    .search-wrap{ width:calc(100vw - 190px); }
+    .seg button{ padding:8px 11px; font-size:12px; }
+    .credit b{ display:none; }
+    .credit span{ display:none; }
+    .credit{ padding:8px; }
+  }
+  @media (max-width: 500px){
+    .brand{ top:12px; left:12px; padding:7px 12px 7px 8px; }
+    .brand h1{ font-size:15px; }
+    .brand .logo{ width:30px;height:30px; }
+    .search-wrap{ top:60px; left:10px; right:10px; transform:none; width:auto; }
+    .instruments{ top:12px; right:10px; flex-direction:row; align-items:center; }
+    .info-card{ left:10px; right:10px; width:auto; bottom:10px; }
+    .credit{ bottom:10px; right:10px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="brand">
+  <div class="logo">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+      <path d="M18 3C11 3 5.3 8.5 5.3 15.3C5.3 24.8 18 33 18 33S30.7 24.8 30.7 15.3C30.7 8.5 25 3 18 3Z" fill="#EA4335"/>
+      <circle cx="18" cy="15" r="6.6" fill="#fff"/>
+      <circle cx="18" cy="15" r="4.2" fill="#1A73E8"/>
+    </svg>
+  </div>
+  <div>
+    <h1><span class="s1">S</span><span class="s2">h</span><span class="s3">a</span><span class="s4">r</span><span class="s5">o</span>z </h1>
+  </div>
+</div>
+
+<div class="instruments">
+  <div class="seg" id="basemapSeg">
+    <button data-layer="street" class="active street">Street</button>
+    <button data-layer="dark" class="dark">Dark</button>
+    <button data-layer="sat" class="sat">Satellite</button>
+  </div>
+  <button class="icon-btn" id="locateBtn" title="Use current location">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3.2M12 18.8V22M2 12h3.2M18.8 12H22"/></svg>
+  </button>
+</div>
+
+<div class="search-wrap">
+  <div class="search-box">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input id="searchInput" type="text" placeholder="Search Sharoz Map — city, campus, address…" autocomplete="off">
+    <button class="clear-btn" id="clearBtn">✕</button>
+  </div>
+  <div class="search-results" id="searchResults"></div>
+</div>
+
+<div class="info-card" id="infoCard">
+  <div class="info-top">
+    <button class="close" id="fnClose">✕</button>
+    <h3 id="fnTitle">Selected point</h3>
+    <div class="coords" id="fnCoords">—</div>
+  </div>
+  <div class="info-body">
+    <div class="fn-rows" id="fnRows"></div>
+    <div class="fn-actions">
+      <button class="ghost" id="copyBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2H15"/></svg>Copy</button>
+      <button class="primary" id="shareBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.6l7.5-4.3M8.3 13.4l7.5 4.3"/></svg>Share</button>
+    </div>
+  </div>
+</div>
+
+<a class="credit" href="https://www.facebook.com/sharoz.ifrahim" target="_blank" rel="noopener noreferrer">
+  <div class="fb-icon"><svg viewBox="0 0 24 24"><path d="M22 12.06C22 6.5 17.52 2 12 2S2 6.5 2 12.06C2 17.08 5.66 21.23 10.44 22v-7.02H7.9v-2.92h2.54V9.85c0-2.5 1.49-3.89 3.78-3.89 1.1 0 2.24.2 2.24.2v2.46h-1.26c-1.24 0-1.63.77-1.63 1.56v1.88h2.78l-.44 2.92h-2.34V22C18.34 21.23 22 17.08 22 12.06Z"/></svg></div>
+  <div><b>Sharoz Map</b><span>by Sharoz Ifrahim · Facebook</span></div>
+</a>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  const map = L.map('map', { zoomControl:false, worldCopyJump:true }).setView([30.1575, 71.5249], 5); // Multan, PK default
+  L.control.zoom({ position:'bottomright' }).addTo(map);
+
+  // Esri basemaps — free, no API key required, generous usage terms.
+  const streetLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Tiles &copy; Esri — Source: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, (c) OpenStreetMap contributors, and the GIS User Community'
+  });
+
+  const darkLayer = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 16, attribution: 'Tiles &copy; Esri — Esri, DeLorme, NAVTEQ'
+  });
+
+  const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19, attribution: 'Tiles &copy; Esri — Esri, Maxar, Earthstar Geographics'
+  });
+
+  let currentBase = streetLayer.addTo(map);
+
+  function setBase(key){
+    map.removeLayer(currentBase);
+    document.documentElement.classList.remove('dark');
+    if(key === 'dark'){ currentBase = darkLayer; document.documentElement.classList.add('dark'); }
+    else if(key === 'sat'){ currentBase = satLayer; }
+    else { currentBase = streetLayer; }
+    currentBase.addTo(map);
+    document.querySelectorAll('#basemapSeg button').forEach(b=>b.classList.toggle('active', b.dataset.layer===key));
+  }
+  if(prefersDark){ setBase('dark'); }
+
+  document.getElementById('basemapSeg').addEventListener('click', e=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    setBase(btn.dataset.layer);
+  });
+
+  const pinIcon = L.divIcon({
+    className:'custom-pin',
+    html:`<svg width="34" height="44" viewBox="0 0 34 44" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17 0C7.6 0 0 7.6 0 17c0 12.7 17 27 17 27s17-14.3 17-27C34 7.6 26.4 0 17 0z" fill="#EA4335"/>
+      <circle cx="17" cy="17" r="6.4" fill="#fff"/>
+      <circle cx="17" cy="17" r="3.6" fill="#1A73E8"/>
+    </svg>`,
+    iconSize:[34,44], iconAnchor:[17,44]
+  });
+
+  let marker = null;
+  const infoCard = document.getElementById('infoCard');
+  const fnCoords = document.getElementById('fnCoords');
+  const fnRows = document.getElementById('fnRows');
+  const fnTitle = document.getElementById('fnTitle');
+  let lastPoint = null;
+
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(showToast._tm);
+    showToast._tm = setTimeout(()=>t.classList.remove('show'), 2200);
+  }
+  function fmtCoord(v){ return v.toFixed(6); }
+
+  function renderRows(addr){
+    const fields = [
+      ['Locality', addr.locality],
+      ['City / Town', addr.city],
+      ['State / Region', addr.state],
+      ['Country', addr.country],
+      ['Postcode', addr.postcode],
+    ].filter(([,v]) => v);
+    fnRows.innerHTML = fields.map(([k,v])=>`<div class="fn-row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('') || `<div class="fn-row"><span class="k">Address</span><span class="v">Not found</span></div>`;
+  }
+
+  async function placePoint(lat, lng, label){
+    if(marker) map.removeLayer(marker);
+    marker = L.marker([lat,lng], {icon:pinIcon}).addTo(map);
+    map.flyTo([lat,lng], Math.max(map.getZoom(), 13), { duration: 0.8 });
+
+    fnTitle.textContent = label || 'Selected point';
+    fnCoords.textContent = `Lat ${fmtCoord(lat)}   Lng ${fmtCoord(lng)}`;
+    fnRows.innerHTML = `<div class="fn-row"><span class="k">Address</span><span class="v">Looking up…</span></div>`;
+    infoCard.classList.add('show');
+    lastPoint = { lat, lng, address:null, label: label || 'Selected point' };
+
+    try{
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`, {
+        headers: { 'Accept-Language': 'en' }
+      });
+      const data = await res.json();
+      const a = data.address || {};
+      const addr = {
+        locality: a.suburb || a.neighbourhood || a.hamlet || a.village || '',
+        city: a.city || a.town || a.county || '',
+        state: a.state || a.region || '',
+        country: a.country || '',
+        postcode: a.postcode || ''
+      };
+      lastPoint.address = addr;
+      lastPoint.display = data.display_name;
+      if(!label){ fnTitle.textContent = addr.city || addr.locality || 'Selected point'; }
+      renderRows(addr);
+    }catch(err){
+      fnRows.innerHTML = `<div class="fn-row"><span class="k">Address</span><span class="v">Lookup failed</span></div>`;
+    }
+  }
+
+  map.on('click', (e)=> placePoint(e.latlng.lat, e.latlng.lng, null));
+  document.getElementById('fnClose').addEventListener('click', ()=> infoCard.classList.remove('show'));
+
+  /* ---------------- Search ---------------- */
+  const searchInput = document.getElementById('searchInput');
+  const searchResults = document.getElementById('searchResults');
+  const clearBtn = document.getElementById('clearBtn');
+  let searchTimer = null;
+
+  searchInput.addEventListener('input', ()=>{
+    clearBtn.style.display = searchInput.value ? 'flex' : 'none';
+    clearTimeout(searchTimer);
+    const q = searchInput.value.trim();
+    if(q.length < 3){ searchResults.classList.remove('show'); searchResults.innerHTML=''; return; }
+    searchTimer = setTimeout(()=> runSearch(q), 400);
+  });
+  clearBtn.addEventListener('click', ()=>{
+    searchInput.value=''; clearBtn.style.display='none';
+    searchResults.classList.remove('show'); searchResults.innerHTML='';
+    searchInput.focus();
+  });
+
+  async function runSearch(q){
+    searchResults.innerHTML = `<div class="empty">Searching…</div>`;
+    searchResults.classList.add('show');
+    try{
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&addressdetails=1&limit=6`, {
+        headers: { 'Accept-Language': 'en' }
+      });
+      const data = await res.json();
+      if(!data.length){ searchResults.innerHTML = `<div class="empty">No results found</div>`; return; }
+      searchResults.innerHTML = data.map((d,i)=>`<div data-i="${i}"><span class="pin-dot">📍</span><span>${d.display_name}</span></div>`).join('');
+      searchResults._data = data;
+      Array.from(searchResults.children).forEach(el=>{
+        el.addEventListener('click', ()=>{
+          const d = searchResults._data[Number(el.dataset.i)];
+          searchInput.value = d.display_name.split(',')[0];
+          searchResults.classList.remove('show');
+          placePoint(parseFloat(d.lat), parseFloat(d.lon), d.display_name.split(',')[0]);
+        });
+      });
+    }catch(err){
+      searchResults.innerHTML = `<div class="empty">Search unavailable — try again</div>`;
+    }
+  }
+
+  document.addEventListener('click', (e)=>{
+    if(!e.target.closest('.search-wrap')) searchResults.classList.remove('show');
+  });
+
+  /* ---------------- Current location ---------------- */
+  document.getElementById('locateBtn').addEventListener('click', ()=>{
+    if(!navigator.geolocation){ showToast('Geolocation not supported on this device'); return; }
+    showToast('Locating…');
+    navigator.geolocation.getCurrentPosition(
+      (pos)=>{
+        const { latitude, longitude } = pos.coords;
+        placePoint(latitude, longitude, 'Your current location');
+      },
+      ()=> showToast('Could not access your location'),
+      { enableHighAccuracy:true, timeout:10000 }
+    );
+  });
+
+  /* ---------------- Copy & Share ---------------- */
+  function buildShareText(){
+    if(!lastPoint) return '';
+    const a = lastPoint.address || {};
+    const parts = [a.city, a.state, a.country].filter(Boolean).join(', ');
+    const url = `https://www.openstreetmap.org/?mlat=${lastPoint.lat}&mlon=${lastPoint.lng}#map=15/${lastPoint.lat}/${lastPoint.lng}`;
+    return `${lastPoint.label}${parts ? ' — ' + parts : ''}\nLat ${fmtCoord(lastPoint.lat)}, Lng ${fmtCoord(lastPoint.lng)}\n${url}\n\nvia Sharoz Map`;
+  }
+
+  document.getElementById('copyBtn').addEventListener('click', async ()=>{
+    if(!lastPoint){ showToast('Pick a point on the map first'); return; }
+    try{ await navigator.clipboard.writeText(buildShareText()); showToast('Copied to clipboard'); }
+    catch(err){ showToast('Could not copy'); }
+  });
+
+  document.getElementById('shareBtn').addEventListener('click', async ()=>{
+    if(!lastPoint){ showToast('Pick a point on the map first'); return; }
+    const text = buildShareText();
+    if(navigator.share){
+      try{ await navigator.share({ title:'Sharoz Map — location', text }); }
+      catch(err){ /* cancelled */ }
+    }else{
+      try{ await navigator.clipboard.writeText(text); showToast('Link copied — share it anywhere'); }
+      catch(err){ showToast('Could not share'); }
+    }
+  });
+
+  window.addEventListener('load', ()=>{
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(
+        (pos)=>{ map.setView([pos.coords.latitude, pos.coords.longitude], 12, { animate:false }); },
+        ()=>{ /* keep default view */ },
+        { timeout: 4000 }
+      );
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

@@ -460,7 +460,7 @@
     if(!lastPoint) return '';
     const a = lastPoint.address || {};
     const parts = [a.city, a.state, a.country].filter(Boolean).join(', ');
-    const url = `https://www.openstreetmap.org/?mlat=${lastPoint.lat}&mlon=${lastPoint.lng}#map=15/${lastPoint.lat}/${lastPoint.lng}`;
+    const url = `https://www.google.com/maps?q=${lastPoint.lat},${lastPoint.lng}`;
     return `${lastPoint.label}${parts ? ' — ' + parts : ''}\nLat ${fmtCoord(lastPoint.lat)}, Lng ${fmtCoord(lastPoint.lng)}\n${url}\n\nvia Sharoz Map`;
   }
 
